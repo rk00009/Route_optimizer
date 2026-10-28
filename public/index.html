@@ -1,0 +1,1122 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Route Optimizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    :root{--blue:#2167e8;--ink:#172033;--muted:#64748b;--line:#dbe2ec;--red:#b42318}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#eef2f7;color:var(--ink)}
+    .app{display:grid;grid-template-columns:390px minmax(0,1fr);min-height:100vh;background:#fff}
+    .sidebar{position:sticky;top:0;align-self:start;padding:22px;background:#fff;border-right:1px solid var(--line);overflow:auto;height:100vh;min-height:100vh}
+    .brand{display:flex;gap:11px;align-items:center}
+    .logo{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#eaf1ff;color:var(--blue);font-size:22px;font-weight:900}
+    h1{font-size:22px;margin:0;letter-spacing:-.5px}
+    .subtitle{font-size:12px;line-height:1.5;color:var(--muted);margin:7px 0 22px}
+    .section{margin-top:21px}
+    .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+    .section-head h2{font-size:14px;margin:0}
+    .step{font-size:10px;color:var(--blue);font-weight:800;letter-spacing:.08em}
+    label{display:block;font-size:11px;font-weight:700;color:#475569;margin-bottom:6px}
+    input,select{width:100%;min-width:0;height:40px;border:1px solid #cbd5e1;border-radius:8px;padding:0 10px;font:inherit;font-size:12px;background:#fff;color:var(--ink);outline:none}
+    input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px #2167e81a}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+    .grid-priority{display:grid;grid-template-columns:1fr 100px;gap:8px;align-items:end}
+    .note{font-size:10px;color:var(--muted);line-height:1.5;margin:7px 0 0}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:9px;padding:10px 12px;font:inherit;font-size:12px;font-weight:750;cursor:pointer}
+    .btn-primary{background:var(--blue);color:white}
+    .btn-primary:hover{background:#174fc0}
+    .btn-secondary{background:#edf2f8;color:#334155}
+    .btn-secondary:hover{background:#e2e8f0}
+    .btn-full{width:100%;margin-top:10px}
+    .btn:disabled{opacity:.6;cursor:wait}
+    .delivery-list{display:grid;gap:10px}
+    .delivery-card{border:1px solid var(--line);border-radius:11px;padding:11px;background:#fff}
+    .delivery-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+    .delivery-name{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800}
+    .stop-badge{display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:#eaf1ff;color:var(--blue);font-size:11px;flex:0 0 25px}
+    .remove{border:0;border-radius:7px;width:28px;height:28px;font-size:18px;background:#f1f5f9;color:#64748b;cursor:pointer}
+    .remove:hover{background:#fee2e2;color:var(--red)}
+    .delivery-fields{display:grid;gap:9px}
+    .checkbox-row{display:flex;align-items:flex-start;gap:8px;font-size:11px;color:#475569;line-height:1.45}
+    .checkbox-row input{width:14px;height:14px;flex:0 0 auto;margin:1px 0 0;accent-color:var(--blue)}
+    .priority-info{background:#f0f6ff;border:1px solid #d9e7ff;border-radius:9px;padding:10px;font-size:10px;color:#37527e;line-height:1.5;margin-top:13px}
+    .candidate-panel{display:none;margin-top:9px;padding:10px;border:1px solid #cfe0ff;border-radius:9px;background:#f8fbff}
+    .candidate-panel.visible{display:block}
+    .candidate-panel select{height:auto;min-height:40px;padding:8px;font-size:11px}
+    .candidate-actions{display:flex;gap:7px;margin-top:8px}
+    .candidate-actions .btn{flex:1;padding:8px;font-size:11px}
+    .toast{display:none;margin-top:9px;padding:9px;border-radius:8px;font-size:11px;line-height:1.5}
+    .toast.error{display:block;color:#991b1b;background:#fef2f2;border:1px solid #fecaca}
+    .toast.success{display:block;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0}
+    .main{display:flex;flex-direction:column;min-width:0;min-height:100vh;background:#eef2f7}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 22px;background:#fff;border-bottom:1px solid var(--line)}
+    .topbar h2{font-size:15px;margin:0}
+    .topbar p{font-size:11px;color:var(--muted);margin:4px 0 0}
+    .status{white-space:nowrap;font-size:10px;font-weight:800;padding:7px 10px;border-radius:20px;background:#f1f5f9;color:#64748b}
+    .map-wrap{position:relative;flex:none;height:clamp(360px,52vh,560px);min-height:360px}
+    #map{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+    .results{display:none;background:#fff;border-top:1px solid var(--line);padding:17px 22px}
+    .results.visible{display:block}
+    .results h3{font-size:14px;margin:0 0 12px}
+    .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+    .stat{border:1px solid var(--line);background:#f8fafc;border-radius:9px;padding:11px}
+    .stat span{font-size:10px;color:var(--muted);display:block}
+    .stat strong{display:block;font-size:17px;margin-top:5px}
+    .result-list{display:grid;gap:7px;margin-top:12px}
+    .result-item{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:11px;min-width:0}
+    .result-item .details{min-width:0;overflow-wrap:anywhere}
+    .result-item small{display:block;color:var(--muted);margin-top:3px;line-height:1.45}
+    .map-tip{position:absolute;z-index:400;top:13px;left:50%;transform:translateX(-50%);background:#fff;box-shadow:0 4px 18px #0f172a18;border:1px solid var(--line);border-radius:9px;padding:9px 13px;font-size:11px;color:#475569;white-space:nowrap;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis}
+    .footer{padding:10px 20px;background:#fff;border-top:1px solid var(--line);font-size:10px;color:var(--muted)}
+    .allocation-card{border:1px solid var(--line);border-radius:9px;padding:10px;margin-top:8px;background:#f8fafc;font-size:11px}
+    .allocation-card strong{font-size:12px}
+    .allocation-card small{display:block;color:var(--muted);line-height:1.45;margin-top:4px}
+    .allocation-card.warning{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+    .truck-list{display:grid;gap:8px}
+    @media(max-width:850px){.app{grid-template-columns:1fr}.sidebar{position:static;height:auto;min-height:0;overflow:visible;border-right:0;border-bottom:1px solid var(--line)}.map-wrap{height:390px;min-height:390px}.topbar{padding:15px 17px}}
+    @media(max-width:420px){.sidebar{padding:16px}.grid-priority{grid-template-columns:1fr 88px}.stats{gap:6px}.stat{padding:8px}.stat strong{font-size:15px}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">↗</div><h1>Route Optimizer</h1></div>
+    <p class="subtitle">Plan priority-based deliveries from your warehouse and back.</p>
+
+    <section class="section">
+      <div class="section-head"><h2>Starting warehouse</h2><span class="step">STEP 01</span></div>
+      <label for="warehouseAddress">Warehouse address or location</label>
+      <input id="warehouseAddress" placeholder="e.g. New Delhi warehouse" autocomplete="street-address">
+      <div class="grid2">
+        <div><label for="warehouseLat">Latitude (optional)</label><input id="warehouseLat" inputmode="decimal" placeholder="28.6139"></div>
+        <div><label for="warehouseLng">Longitude (optional)</label><input id="warehouseLng" inputmode="decimal" placeholder="77.2090"></div>
+      </div>
+      <p class="note">Enter an address, paste a Google Maps link, or enter both coordinates. Coordinates take precedence when both are provided.</p>
+      <button class="btn btn-secondary btn-full" id="locateWarehouseBtn" type="button">Find warehouse coordinates</button>
+      <div id="warehouseToast" class="toast"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Delivery stops</h2><span class="step">STEP 02</span></div>
+      <div id="deliveryList" class="delivery-list"></div>
+      <button id="addStopBtn" class="btn btn-secondary btn-full" type="button">＋ Add delivery stop</button>
+      <p class="note">Each delivery is one intact PO. Add its volume and optional geographic group before allocating trucks.</p>
+    </section>
+
+    <section class="section">
+      <div class="section-head"><h2>Truck fleet</h2><span class="step">STEP 03</span></div>
+      <div id="truckList" class="truck-list"></div>
+      <button id="addTruckBtn" class="btn btn-secondary btn-full" type="button">＋ Add truck</button>
+      <div class="grid2">
+        <div><label for="safetyBuffer">Safety buffer (%)</label><input id="safetyBuffer" type="number" min="0" max="99.99" step="0.1" value="10"></div>
+        <div class="checkbox-row" style="padding-top:22px"><input type="checkbox" id="payloadEnabled"><label for="payloadEnabled">Enforce payload when configured</label></div>
+      </div>
+      <p class="note">Usable volume = nominal capacity × (1 − buffer). POs are never split.</p>
+    </section>
+
+    <div class="priority-info"><strong>Allocation:</strong> geographic groups are kept together when a suitable truck can carry the complete group. Otherwise, the solver selects whole-PO combinations that maximize usable volume.</div>
+
+    <section class="section">
+      <div class="section-head"><h2>Route settings</h2><span class="step">STEP 04</span></div>
+      <div class="checkbox-row"><input type="checkbox" id="returnWarehouse" checked><label for="returnWarehouse">Return to warehouse after the final delivery</label></div>
+      <button id="optimizeBtn" class="btn btn-primary btn-full" type="button">Allocate trucks & optimize routes</button>
+      <button id="sampleBtn" class="btn btn-secondary btn-full" type="button">Load sample PO data</button>
+      <button id="resetBtn" class="btn btn-secondary btn-full" type="button">Reset all inputs</button>
+      <div id="mainToast" class="toast"></div>
+      <div id="candidatePanel" class="candidate-panel" aria-live="polite">
+        <strong>Select the correct location</strong>
+        <p class="note">The original address is preserved. Choose a result only if it matches your intended location.</p>
+        <select id="candidateSelect" aria-label="Address candidates"></select>
+        <div class="candidate-actions">
+          <button id="confirmCandidateBtn" class="btn btn-primary" type="button">Confirm selection</button>
+          <button id="rejectCandidateBtn" class="btn btn-secondary" type="button">Reject results</button>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div><h2>Route map & trip summary</h2><p>Road routes and distances powered by OpenStreetMap-based services.</p></div>
+      <div id="statusPill" class="status">Ready</div>
+    </header>
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div id="mapTip" class="map-tip">Add your warehouse and delivery stops to begin.</div>
+    </div>
+    <section id="results" class="results">
+      <h3>Optimized route summary</h3>
+      <div class="stats">
+        <div class="stat"><span>Total road distance</span><strong id="totalDistance">—</strong></div>
+        <div class="stat"><span>Estimated driving time</span><strong id="totalDuration">—</strong></div>
+        <div class="stat"><span>Delivery stops</span><strong id="stopCount">—</strong></div>
+      </div>
+      <div id="resultList" class="result-list"></div>
+      <h3 style="margin-top:18px">Truck allocation</h3>
+      <div id="allocationList" class="result-list"></div>
+    </section>
+    <div class="footer">Uses public geocoding and routing services. Results depend on internet access and OpenStreetMap data.</div>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(() => {
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  const deliveryList = $("deliveryList");
+  const truckList = $("truckList");
+  const candidatePanel = $("candidatePanel");
+  const candidateSelect = $("candidateSelect");
+  let candidateDecision = null;
+  let nextId = 1;
+  let nextTruckId = 1;
+  let routeLayer = null;
+  let currentRoutePoints = [];
+  const markersLayer = L.layerGroup();
+  const previewLayer = L.layerGroup();
+
+  const map = L.map("map").setView([28.6139, 77.2090], 10);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  markersLayer.addTo(map);
+  previewLayer.addTo(map);
+
+  function setToast(id, message, type = "error") {
+    const el = $(id);
+    el.textContent = message;
+    el.className = "toast " + type;
+  }
+
+  function clearToast(id) {
+    const el = $(id);
+    el.textContent = "";
+    el.className = "toast";
+  }
+
+  $("confirmCandidateBtn").addEventListener("click", () => {
+    if (candidateDecision) candidateDecision.resolve(candidateSelect.value);
+  });
+
+  $("rejectCandidateBtn").addEventListener("click", () => {
+    if (candidateDecision) candidateDecision.reject(new Error("No address candidate was confirmed. Enter coordinates or search again."));
+  });
+
+  function setStatus(message) {
+    $("statusPill").textContent = message;
+  }
+
+  function setBusy(busy) {
+    $("optimizeBtn").disabled = busy;
+    $("locateWarehouseBtn").disabled = busy;
+    $("addStopBtn").disabled = busy;
+    $("optimizeBtn").textContent = busy ? "Calculating routes…" : "Allocate trucks & optimize routes";
+  }
+
+  function makeTruckCard(id, capacity = "", payload = "") {
+    const card = document.createElement("div");
+    card.className = "delivery-card";
+    card.dataset.truckId = String(id);
+    card.innerHTML = `
+      <div class="delivery-head"><div class="delivery-name"><span class="stop-badge">T</span><span>Truck ${id}</span></div>
+      <button class="remove" type="button" title="Remove truck" aria-label="Remove truck">×</button></div>
+      <div class="grid2" style="margin-top:0">
+        <div><label>Volume capacity (m³)</label><input class="truck-capacity" type="number" min="0.01" step="0.01" placeholder="30"></div>
+        <div><label>Payload limit (kg, optional)</label><input class="truck-payload" type="number" min="0.01" step="0.01" placeholder="Optional"></div>
+      </div>`;
+    card.querySelector(".truck-capacity").value = capacity;
+    card.querySelector(".truck-payload").value = payload;
+    card.querySelector(".remove").addEventListener("click", () => {
+      card.remove();
+      renumberTrucks();
+    });
+    truckList.appendChild(card);
+  }
+
+  function renumberTrucks() {
+    Array.from(truckList.children).forEach((card, index) => {
+      const id = index + 1;
+      card.dataset.truckId = String(id);
+      card.querySelector(".delivery-name span:last-child").textContent = "Truck " + id;
+    });
+    nextTruckId = truckList.children.length + 1;
+  }
+
+  function showPreviewMarker(location, label, kind = "location") {
+    previewLayer.clearLayers();
+    const isWarehouse = kind === "warehouse";
+    const color = isWarehouse ? "#167647" : "#2167e8";
+    const icon = L.divIcon({
+      className: "",
+      html: `<div style="width:29px;height:29px;border-radius:50%;border:3px solid white;background:${color};box-shadow:0 2px 7px #0004;color:white;font-size:11px;font-weight:800;display:grid;place-items:center">${isWarehouse ? "W" : "•"}</div>`,
+      iconSize: [29, 29],
+      iconAnchor: [14, 14]
+    });
+
+    L.marker([location.lat, location.lon], { icon })
+      .bindPopup(`<strong>${escapeHtml(label)}</strong><br>${location.lat.toFixed(6)}, ${location.lon.toFixed(6)}`)
+      .addTo(previewLayer)
+      .openPopup();
+    map.setView([location.lat, location.lon], Math.max(map.getZoom(), 14));
+  }
+
+  function readCoordinates(latValue, lngValue, label) {
+    const latText = String(latValue ?? "").trim();
+    const lngText = String(lngValue ?? "").trim();
+
+    if (!latText && !lngText) return null;
+
+    if (!latText || !lngText || !Number.isFinite(Number(latText)) || !Number.isFinite(Number(lngText))) {
+      throw new Error(label + ": enter both latitude and longitude.");
+    }
+
+    const lat = Number(latText);
+    const lon = Number(lngText);
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      throw new Error(label + ": latitude must be between -90 and 90 and longitude between -180 and 180.");
+    }
+
+    return { lat, lon, label };
+  }
+
+  function coordinatesFromMapLink(value, label) {
+    const text = String(value || "").trim();
+    const patterns = [
+      /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/,
+      /[!?](?:3d)(-?\d+(?:\.\d+)?)[^0-9-]+(?:4d)(-?\d+(?:\.\d+)?)/
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (!match) continue;
+      const lat = Number(match[1]);
+      const lon = Number(match[2]);
+      if (Number.isFinite(lat) && Number.isFinite(lon) &&
+          lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+        return { lat, lon, label };
+      }
+    }
+
+    return null;
+  }
+
+  async function apiJson(url) {
+    let response;
+
+    try {
+      response = await fetch(url, { headers: { "Accept": "application/json" } });
+    } catch {
+      throw new Error("Cannot connect to the backend. Run npm start and open http://localhost:3000, not Live Server.");
+    }
+
+    let data;
+
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("Backend returned an unreadable response. Open http://localhost:3000 and check server.js.");
+    }
+
+    if (!response.ok) {
+      throw new Error(data.error || `Request failed (${response.status}).`);
+    }
+
+    return data;
+  }
+
+  async function postJson(url, body) {
+    let response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    } catch {
+      throw new Error("Cannot connect to the backend. Run npm start and open http://localhost:3000.");
+    }
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error || `Request failed (${response.status}).`);
+    return data;
+  }
+
+  async function geocode(query) {
+    const data = await apiJson("/api/geocode?q=" + encodeURIComponent(query));
+
+    if (!Array.isArray(data) || !data.length) {
+      throw new Error(`No credible address candidate found for "${query}". Check the spelling or enter coordinates manually.`);
+    }
+
+    candidateSelect.innerHTML = "";
+    data.forEach((item, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      const matchNote = item.broad_match
+        ? " — broader locality match; verify carefully"
+        : " — exact query match";
+      option.textContent = `${item.display_name || query} (${Number(item.lat).toFixed(5)}, ${Number(item.lon).toFixed(5)})${matchNote}`;
+      candidateSelect.appendChild(option);
+    });
+    candidatePanel.classList.add("visible");
+
+    let selectedIndex;
+    try {
+      selectedIndex = await new Promise((resolve, reject) => {
+        candidateDecision = { resolve, reject };
+      });
+    } finally {
+      candidateDecision = null;
+      candidatePanel.classList.remove("visible");
+    }
+
+    const item = data[Number(selectedIndex)];
+    const lat = Number(item?.lat);
+    const lon = Number(item?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      throw new Error("Address lookup returned invalid coordinates.");
+    }
+    return { lat, lon, label: item.display_name || query };
+  }
+
+  async function resolveLocation(address, lat, lng, label) {
+    const coords = readCoordinates(lat, lng, label);
+    if (coords) return coords;
+
+    const query = String(address || "").trim();
+
+    if (!query) {
+      throw new Error(label + ": enter an address or both coordinates.");
+    }
+
+    const linkCoordinates = coordinatesFromMapLink(query, label);
+    if (linkCoordinates) return linkCoordinates;
+
+    return geocode(query);
+  }
+
+  function cards() {
+    return Array.from(deliveryList.querySelectorAll(".delivery-card"));
+  }
+
+  function makeStopCard(id, index, address = "", priority = null) {
+    const card = document.createElement("div");
+    card.className = "delivery-card";
+    card.dataset.stopId = String(id);
+
+    card.innerHTML = `
+      <div class="delivery-head">
+        <div class="delivery-name"><span class="stop-badge">${index + 1}</span><span>Delivery stop ${index + 1}</span></div>
+        <button class="remove" type="button" title="Remove stop" aria-label="Remove stop">×</button>
+      </div>
+      <div class="delivery-fields">
+        <div class="grid2" style="margin-top:0">
+          <div><label>PO ID</label><input class="stop-id" placeholder="PO-001"></div>
+          <div><label>PO name/category</label><input class="stop-name" placeholder="Vector"></div>
+        </div>
+        <div><label>Delivery address</label><input class="stop-address" placeholder="Street, area, city" autocomplete="street-address"></div>
+        <div class="grid2" style="margin-top:0">
+          <div><label>Latitude (optional)</label><input class="stop-lat" inputmode="decimal" placeholder="28.5355"></div>
+          <div><label>Longitude (optional)</label><input class="stop-lng" inputmode="decimal" placeholder="77.3910"></div>
+        </div>
+        <div class="grid-priority">
+          <div><label>Priority (optional)</label><select class="stop-priority"></select></div>
+          <button class="btn btn-secondary locate-stop" type="button">Find address</button>
+        </div>
+        <div class="grid2" style="margin-top:0">
+          <div><label>Volume (m³)</label><input class="stop-volume" type="number" min="0.01" step="0.01" placeholder="12"></div>
+          <div><label>Weight (kg, optional)</label><input class="stop-weight" type="number" min="0.01" step="0.01" placeholder="Optional"></div>
+        </div>
+        <div><label>Geographic group (optional)</label><input class="stop-region" placeholder="North / Uttarakhand"></div>
+        <div class="stop-toast toast"></div>
+      </div>`;
+
+    card.querySelector(".stop-address").value = address;
+
+    card.querySelector(".remove").addEventListener("click", () => {
+      card.remove();
+      renumberStops();
+      updatePriorityOptions();
+    });
+
+    card.querySelector(".locate-stop").addEventListener("click", async () => {
+      const toast = card.querySelector(".stop-toast");
+      toast.className = "stop-toast toast";
+
+      try {
+        const location = await resolveLocation(
+          card.querySelector(".stop-address").value,
+          card.querySelector(".stop-lat").value,
+          card.querySelector(".stop-lng").value,
+          "Delivery stop"
+        );
+
+        card.querySelector(".stop-lat").value = location.lat;
+        card.querySelector(".stop-lng").value = location.lon;
+
+        if (!card.querySelector(".stop-address").value.trim()) {
+          card.querySelector(".stop-address").value = location.label;
+        }
+
+        showPreviewMarker(location, card.querySelector(".stop-address").value || "Delivery stop");
+        toast.textContent = `Coordinates found: ${location.lat.toFixed(6)}, ${location.lon.toFixed(6)}`;
+        toast.className = "stop-toast toast success";
+      } catch (error) {
+        toast.textContent = error.message;
+        toast.className = "stop-toast toast error";
+      }
+    });
+
+    card.dataset.initialPriority = String(priority);
+    deliveryList.appendChild(card);
+    updatePriorityOptions();
+    renumberStops();
+
+    return card;
+  }
+
+  const sampleData = {
+    warehouse: {
+      address: "https://www.google.com/maps/place/The+Lily+Factory/@28.2645252,77.1761976,17z/data=!3m1!4b1!4m16!1m9!4m8!1m0!1m6!1m2!1s0x390d27e36fa9b0e3:0xdfe7043fbef6800d!2sThe+Lily+Factory,+Near+nimot+police+chowki,+Bedhwaka,+Haryana+122103!2m2!1d77.1787725!2d28.2645205!3m5!1s0x390d27e36fa9b0e3:0xdfe7043fbef6800d!8m2!3d28.2645205!4d77.1787725!16s%2Fg%2F11gjzmfc0m?entry=ttu",
+      lat: "28.2645252",
+      lon: "77.1761976"
+    },
+    stops: [
+      {
+        id: "PO-001", name: "Vector", volume: "12", region: "South Delhi",
+        address: "https://www.google.com/maps/place/BSG+Culture+Centre/@28.5683075,77.2115903,15z/data=!4m15!1m8!3m7!1s0x390ce25dbad548bb:0x754a271dc18ff7c4!2sSouth+Extension,+Block+F,+South+Extension+I,+New+Delhi,+Delhi!3b1!8m2!3d28.5687238!4d77.2209661!16zL20vMDVtaDQ5!3m5!1s0x390ce25d2bdd955d:0x32008a51a5ff6510!8m2!3d28.5658945!4d77.219731!16s%2Fg%2F11bv3v7dnb?entry=ttu",
+        lat: "28.5683075", lon: "77.2115903"
+      },
+      {
+        id: "PO-002", name: "Intra", volume: "10", region: "South Delhi",
+        address: "https://www.google.com/maps/place/Nine+Eleven/@28.5482307,77.2558011,17z/data=!3m1!4b1!4m14!1m7!3m6!1s0x390ce3c2fe2bd79b:0x95af156342417767!2sKalkaji+mandir!8m2!3d28.5498422!4d77.2607085!16s%2Fm%2F03qfr0q!3m5!1s0x390ce3765e429139:0xa9b68f6bc9684ece!8m2!3d28.548226!4d77.258376!16s%2Fg%2F11lkwn8ny8?entry=ttu",
+        lat: "28.5482307", lon: "77.2558011"
+      },
+      {
+        id: "PO-003", name: "Blankets", volume: "8", region: "Meerut corridor",
+        address: "https://www.google.com/maps/place/Rangoli+Utsav+Madap/@28.9599554,77.7288799,16z/data=!4m6!3m5!1s0x390c64b0bb56b3c3:0x8f8f3402fd074f4d!8m2!3d28.9630987!4d77.7345538!16s%2Fg%2F11bx1tn14t?entry=ttu",
+        lat: "28.9599554", lon: "77.7288799"
+      }
+    ]
+  };
+
+  function loadSampleData() {
+    if (candidateDecision) {
+      candidateDecision.reject(new Error("Sample data loaded."));
+      candidateDecision = null;
+    }
+    $("warehouseAddress").value = sampleData.warehouse.address;
+    $("warehouseLat").value = sampleData.warehouse.lat;
+    $("warehouseLng").value = sampleData.warehouse.lon;
+    deliveryList.innerHTML = "";
+    truckList.innerHTML = "";
+    nextId = 1;
+    nextTruckId = 1;
+    sampleData.stops.forEach((sample, index) => {
+      const card = makeStopCard(nextId++, index);
+      card.querySelector(".stop-id").value = sample.id;
+      card.querySelector(".stop-name").value = sample.name;
+      card.querySelector(".stop-address").value = sample.address;
+      card.querySelector(".stop-lat").value = sample.lat;
+      card.querySelector(".stop-lng").value = sample.lon;
+      card.querySelector(".stop-volume").value = sample.volume;
+      card.querySelector(".stop-region").value = sample.region;
+    });
+    makeTruckCard(nextTruckId++, 30);
+    makeTruckCard(nextTruckId++, 20);
+    $("safetyBuffer").value = "0";
+    $("payloadEnabled").checked = false;
+    $("returnWarehouse").checked = true;
+    clearToast("mainToast");
+    clearToast("warehouseToast");
+    $("results").classList.remove("visible");
+    markersLayer.clearLayers();
+    previewLayer.clearLayers();
+    if (routeLayer) {
+      map.removeLayer(routeLayer);
+      routeLayer = null;
+    }
+    $("mapTip").textContent = "Sample data loaded. Review it or allocate trucks and optimize routes.";
+    setStatus("Sample data loaded");
+    map.setView([28.6139, 77.2090], 10);
+  }
+
+  function renumberStops() {
+    cards().forEach((card, index) => {
+      card.querySelector(".stop-badge").textContent = index + 1;
+      card.querySelector(".delivery-name span:last-child").textContent = "Delivery stop " + (index + 1);
+    });
+  }
+
+  function updatePriorityOptions() {
+    const allCards = cards();
+    const count = allCards.length;
+    const existingValues = allCards.map((card, index) => {
+      const select = card.querySelector(".stop-priority");
+      return select.value || (card.dataset.initialPriority === "null" ? "" : card.dataset.initialPriority || "");
+    });
+    const assignedValues = new Set(existingValues.filter(Boolean));
+
+    allCards.forEach((card, index) => {
+      const select = card.querySelector(".stop-priority");
+      const previous = existingValues[index];
+
+      select.innerHTML = "";
+
+      const automatic = document.createElement("option");
+      automatic.value = "";
+      automatic.textContent = "Auto optimize";
+      select.appendChild(automatic);
+
+      for (let n = 1; n <= count; n++) {
+        const option = document.createElement("option");
+        option.value = String(n);
+        option.textContent = String(n);
+        option.disabled = assignedValues.has(option.value) && option.value !== previous;
+        select.appendChild(option);
+      }
+
+      if (previous !== "" && !Number.isInteger(Number(previous))) {
+        select.value = "";
+      } else {
+        select.value = previous === "" ? "" : String(Math.max(1, Math.min(count, Number(previous))));
+      }
+      select.onchange = () => {
+        updatePriorityOptions();
+        validatePriorities(false);
+      };
+    });
+  }
+
+  function validatePriorities() {
+    const seen = new Set();
+    const invalid = cards().some(card => {
+      const value = card.querySelector(".stop-priority").value;
+      if (value === "") return false;
+      const priority = Number(value);
+      if (!Number.isInteger(priority) || priority < 1 || seen.has(priority)) return true;
+      seen.add(priority);
+      return false;
+    });
+    if (invalid) {
+      setToast("mainToast", "Each numbered priority can be used once. Choose another number or leave the stop as Auto optimize.");
+      return false;
+    }
+    return true;
+  }
+
+  function haversine(a, b) {
+    const rad = d => d * Math.PI / 180;
+    const dLat = rad(b.lat - a.lat);
+    const dLon = rad(b.lon - a.lon);
+    const x = Math.sin(dLat / 2) ** 2 +
+      Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+
+    return 6371000 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+
+  function formatDistance(meters) {
+    if (!Number.isFinite(meters)) return "Unavailable";
+    return meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : Math.round(meters) + " m";
+  }
+
+  function formatDuration(seconds) {
+    if (!Number.isFinite(seconds)) return "Unavailable";
+
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return minutes + " min";
+
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+
+    return hours + " hr " + (rest ? rest + " min" : "");
+  }
+
+  async function getDistanceTable(points) {
+    const coords = points.map(p => `${p.lon},${p.lat}`).join(";");
+    return apiJson("/api/table?coordinates=" + encodeURIComponent(coords));
+  }
+
+  async function getRoadRoute(points) {
+    const coords = points.map(p => `${p.lon},${p.lat}`).join(";");
+    return apiJson("/api/route?coordinates=" + encodeURIComponent(coords));
+  }
+
+  function orderByPriority(stops, distanceTable, pointIndex, basePoints) {
+    const priorities = [...new Set(stops.map(s => s.priority === null ? Infinity : s.priority))]
+      .sort((a, b) => a - b);
+    const ordered = [];
+    let currentIndex = 0;
+
+    for (const priority of priorities) {
+      const remaining = stops.filter(s => (s.priority === null ? Infinity : s.priority) === priority);
+      const groupStart = ordered.length;
+      while (remaining.length) {
+        let bestPosition = 0;
+        let bestDistance = Infinity;
+
+        remaining.forEach((stop, index) => {
+          const targetIndex = pointIndex.get(stop.id);
+          const matrixDistance = distanceTable?.distances?.[currentIndex]?.[targetIndex];
+          const distance = Number.isFinite(matrixDistance)
+            ? matrixDistance
+            : haversine(basePoints[currentIndex], basePoints[targetIndex]);
+
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestPosition = index;
+          }
+        });
+
+        const chosen = remaining.splice(bestPosition, 1)[0];
+        ordered.push(chosen);
+        currentIndex = pointIndex.get(chosen.id);
+      }
+
+      // Improve the feasible order without moving stops across priority groups.
+      if (ordered.length > 2) {
+        let improved = true;
+        while (improved) {
+          improved = false;
+          for (let i = ordered.length - 2; i >= groupStart; i--) {
+            for (let j = i + 1; j < ordered.length; j++) {
+              const before = i === 0 ? 0 : pointIndex.get(ordered[i - 1].id);
+              const first = pointIndex.get(ordered[i].id);
+              const last = pointIndex.get(ordered[j].id);
+              const after = j + 1 < ordered.length ? pointIndex.get(ordered[j + 1].id) : null;
+              const distance = (from, to) => {
+                const matrix = distanceTable?.distances?.[from]?.[to];
+                return Number.isFinite(matrix) ? matrix : haversine(basePoints[from], basePoints[to]);
+              };
+              const oldCost = distance(before, first) + (after === null ? 0 : distance(last, after));
+              const newCost = distance(before, last) + (after === null ? 0 : distance(first, after));
+              if (newCost + 0.5 < oldCost) {
+                const reversed = ordered.slice(i, j + 1).reverse();
+                ordered.splice(i, reversed.length, ...reversed);
+                improved = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return ordered;
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function fitCurrentRoute() {
+    if (!currentRoutePoints.length) return;
+
+    const bounds = L.latLngBounds(currentRoutePoints.map(point => [point.lat, point.lon]));
+    if (routeLayer && typeof routeLayer.getBounds === "function") {
+      const routeBounds = routeLayer.getBounds();
+      if (routeBounds.isValid()) bounds.extend(routeBounds);
+    }
+
+    if (bounds.isValid()) {
+      map.invalidateSize({ pan: false });
+      map.fitBounds(bounds.pad(0.12), {
+        maxZoom: 15,
+        animate: false
+      });
+    }
+  }
+
+  function drawRoute(points, geometry) {
+    markersLayer.clearLayers();
+    previewLayer.clearLayers();
+    currentRoutePoints = points;
+
+    if (routeLayer) {
+      map.removeLayer(routeLayer);
+      routeLayer = null;
+    }
+
+    if (geometry && Array.isArray(geometry.coordinates)) {
+      routeLayer = L.geoJSON({
+        type: "Feature",
+        properties: {},
+        geometry
+      }, {
+        style: { color: "#2167e8", weight: 5, opacity: 0.85 }
+      }).addTo(map);
+    }
+
+    points.forEach(point => {
+      const isWarehouse = point.kind === "warehouse";
+      const color = isWarehouse ? "#167647" : "#2167e8";
+
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="width:29px;height:29px;border-radius:50%;border:3px solid white;background:${color};box-shadow:0 2px 7px #0004;color:white;font-size:11px;font-weight:800;display:grid;place-items:center">${isWarehouse ? "W" : point.order}</div>`,
+        iconSize: [29, 29],
+        iconAnchor: [14, 14]
+      });
+
+      L.marker([point.lat, point.lon], { icon })
+        .bindPopup(`<strong>${escapeHtml(point.label)}</strong><br>${isWarehouse ? "Warehouse" : (point.priority === null ? "Automatic optimization" : "Priority " + point.priority) + " · Stop " + point.order}`)
+        .addTo(markersLayer);
+    });
+
+    fitCurrentRoute();
+  }
+
+  function drawAllocationRoutes(routes) {
+    markersLayer.clearLayers();
+    previewLayer.clearLayers();
+    currentRoutePoints = routes.flatMap(item => item.points);
+    if (routeLayer) map.removeLayer(routeLayer);
+    routeLayer = L.layerGroup().addTo(map);
+    routes.forEach((item, routeIndex) => {
+      if (item.route.geometry) {
+        L.geoJSON({ type: "Feature", properties: {}, geometry: item.route.geometry }, {
+          style: { color: ["#2167e8", "#f97316", "#16a34a", "#9333ea"][routeIndex % 4], weight: 5, opacity: 0.85 }
+        }).addTo(routeLayer);
+      }
+      item.points.forEach(point => {
+        const isWarehouse = point.kind === "warehouse";
+        const icon = L.divIcon({
+          className: "",
+          html: `<div style="width:29px;height:29px;border-radius:50%;border:3px solid white;background:${isWarehouse ? "#167647" : "#2167e8"};box-shadow:0 2px 7px #0004;color:white;font-size:11px;font-weight:800;display:grid;place-items:center">${isWarehouse ? "W" : point.order}</div>`,
+          iconSize: [29, 29], iconAnchor: [14, 14]
+        });
+        L.marker([point.lat, point.lon], { icon })
+          .bindPopup(`<strong>${escapeHtml(point.label)}</strong><br>${isWarehouse ? "Warehouse" : `Truck ${item.truckId} · Stop ${point.order}`}`)
+          .addTo(markersLayer);
+      });
+    });
+    fitCurrentRoute();
+  }
+
+  function renderResults(points, route, stopsCount) {
+    $("results").classList.add("visible");
+    $("totalDistance").textContent = formatDistance(route.distance);
+    $("totalDuration").textContent = formatDuration(route.duration);
+    $("stopCount").textContent = String(stopsCount);
+
+    const list = $("resultList");
+    list.innerHTML = "";
+
+    points.forEach((point, index) => {
+      const row = document.createElement("div");
+      row.className = "result-item";
+
+      const badge = document.createElement("span");
+      badge.className = "stop-badge";
+      badge.textContent = point.kind === "warehouse" ? "W" : String(point.order);
+
+      const details = document.createElement("div");
+      details.className = "details";
+
+      const title = document.createElement("strong");
+      title.textContent = point.kind === "warehouse"
+        ? (index === 0 ? "Start: Warehouse" : "Return: Warehouse")
+        : `${point.order}. ${point.label}`;
+
+      const small = document.createElement("small");
+      small.textContent = point.kind === "warehouse"
+        ? `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`
+        : `${point.priority === null ? "Automatic optimization" : "Priority " + point.priority} · ${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`;
+
+      details.append(title, small);
+      row.append(badge, details);
+      list.appendChild(row);
+    });
+  }
+
+  function renderAllocations(allocationData, routed) {
+    const list = $("allocationList");
+    list.innerHTML = "";
+    allocationData.allocations.forEach(item => {
+      const route = routed.find(entry => entry.truckId === item.truck.id)?.route;
+      const routeEntry = routed.find(entry => entry.truckId === item.truck.id);
+      const sequence = routeEntry
+        ? routeEntry.points.filter(point => point.kind === "delivery")
+          .map(point => `Stop ${point.order}: ${point.label}`)
+          .join(" → ")
+        : "No route sequence available";
+      const row = document.createElement("div");
+      row.className = "allocation-card";
+      row.innerHTML = `<strong>Truck ${escapeHtml(item.truck.id)} · ${escapeHtml(item.groupLabel)}</strong>
+        <small>POs: ${item.pos.map(po => escapeHtml(`${po.id} (${po.name})`)).join(", ")}</small>
+        <small>Route: Warehouse → ${escapeHtml(sequence || "No delivery stops")} → Warehouse</small>
+        <small>${item.assignedVolume.toFixed(2)} m³ assigned / ${item.truck.usableVolume.toFixed(2)} m³ usable · nominal ${item.nominalUtilizationPercentage.toFixed(1)}% · usable ${item.usableUtilizationPercentage.toFixed(1)}% · remaining ${item.remainingUsableVolume.toFixed(2)} m³</small>
+        <small>Round trip: ${route ? formatDistance(route.distance) : "Unavailable"}${route ? ` · ${formatDuration(route.duration)}` : ""}</small>`;
+      list.appendChild(row);
+    });
+    allocationData.unassigned.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "allocation-card warning";
+      row.innerHTML = `<strong>Unassigned: ${escapeHtml(item.po.id)} (${escapeHtml(item.po.name)})</strong><small>${escapeHtml(item.reason)}</small>`;
+      list.appendChild(row);
+    });
+  }
+
+  function renderTruckRouteResults(routed) {
+    const list = $("resultList");
+    list.innerHTML = "";
+    routed.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "result-item";
+      const details = document.createElement("div");
+      details.className = "details";
+      const stops = item.points.filter(point => point.kind === "delivery");
+      const title = document.createElement("strong");
+      title.textContent = `Truck ${item.truckId}: Warehouse → ${stops.map(point => point.label).join(" → ")} → Warehouse`;
+      const small = document.createElement("small");
+      small.textContent = `Round trip ${formatDistance(item.route.distance)} · ${formatDuration(item.route.duration)} · ${stops.length} PO stop${stops.length === 1 ? "" : "s"}`;
+      details.append(title, small);
+      row.append(details);
+      list.appendChild(row);
+    });
+  }
+
+  async function optimize() {
+    clearToast("mainToast");
+    setBusy(true);
+    setStatus("Working…");
+    $("mapTip").textContent = "Resolving addresses and calculating road distances…";
+
+    try {
+      const formStops = cards().map((card, index) => ({
+        id: card.dataset.stopId,
+        poId: card.querySelector(".stop-id").value.trim() || `PO-${String(index + 1).padStart(3, "0")}`,
+        name: card.querySelector(".stop-name").value.trim() || `Delivery PO ${index + 1}`,
+        address: card.querySelector(".stop-address").value.trim(),
+        lat: card.querySelector(".stop-lat").value.trim(),
+        lng: card.querySelector(".stop-lng").value.trim(),
+        volume: card.querySelector(".stop-volume").value.trim(),
+        weight: card.querySelector(".stop-weight").value.trim(),
+        region: card.querySelector(".stop-region").value.trim(),
+        priority: card.querySelector(".stop-priority").value === ""
+          ? null
+          : Number(card.querySelector(".stop-priority").value),
+        index
+      }));
+
+      if (!formStops.length) throw new Error("Add at least one delivery stop.");
+      if (!validatePriorities()) throw new Error("Delivery priorities must be positive integers.");
+
+      const warehouse = await resolveLocation(
+        $("warehouseAddress").value,
+        $("warehouseLat").value,
+        $("warehouseLng").value,
+        "Warehouse"
+      );
+
+      $("warehouseLat").value = warehouse.lat;
+      $("warehouseLng").value = warehouse.lon;
+
+      if (!$("warehouseAddress").value.trim()) {
+        $("warehouseAddress").value = warehouse.label;
+      }
+
+      const resolvedStops = [];
+
+      for (let i = 0; i < formStops.length; i++) {
+        const stop = formStops[i];
+        const location = await resolveLocation(
+          stop.address, stop.lat, stop.lng, `Delivery stop ${i + 1}`
+        );
+
+        const card = cards().find(c => c.dataset.stopId === stop.id);
+
+        if (card) {
+          card.querySelector(".stop-lat").value = location.lat;
+          card.querySelector(".stop-lng").value = location.lon;
+
+          if (!card.querySelector(".stop-address").value.trim()) {
+            card.querySelector(".stop-address").value = location.label;
+          }
+        }
+
+        resolvedStops.push({
+          ...stop,
+          lat: location.lat,
+          lon: location.lon,
+          label: stop.address || location.label
+        });
+      }
+
+      const trucks = Array.from(truckList.querySelectorAll(".delivery-card")).map(card => ({
+        id: card.dataset.truckId,
+        volumeCapacity: card.querySelector(".truck-capacity").value,
+        payloadCapacity: card.querySelector(".truck-payload").value
+      }));
+      if (!trucks.length) throw new Error("Add at least one truck.");
+      const allocationData = await postJson("/api/allocate", {
+        pos: resolvedStops.map(stop => ({
+          id: stop.poId,
+          name: stop.name,
+          lat: stop.lat,
+          lon: stop.lon,
+          volume: stop.volume,
+          weight: stop.weight,
+          region: stop.region,
+          priority: stop.priority
+        })),
+        trucks,
+        safetyBufferPercentage: $("safetyBuffer").value,
+        payloadEnabled: $("payloadEnabled").checked
+      });
+
+      const routed = [];
+      for (const item of allocationData.allocations) {
+        const basePoints = [{ id: "warehouse", lat: warehouse.lat, lon: warehouse.lon, label: "Warehouse", kind: "warehouse" }];
+        const stops = item.pos.map(po => resolvedStops.find(stop => stop.poId === po.id)).filter(Boolean);
+        let distanceTable = null;
+        stops.forEach(stop => {
+          basePoints.push({ id: stop.id, lat: stop.lat, lon: stop.lon, label: `${stop.poId} · ${stop.name}`, priority: stop.priority, kind: "delivery" });
+        });
+        const pointIndex = new Map(basePoints.map((point, index) => [point.id, index]));
+        try { distanceTable = await getDistanceTable(basePoints); } catch (error) {
+          console.warn("Road distance matrix unavailable:", error.message);
+        }
+        const orderedStops = orderByPriority(stops, distanceTable, pointIndex, basePoints);
+        const points = [basePoints[0], ...orderedStops.map((stop, index) => ({
+          id: stop.id, lat: stop.lat, lon: stop.lon, label: `${stop.poId} · ${stop.name}`, priority: stop.priority, kind: "delivery", order: index + 1
+        }))];
+        if ($("returnWarehouse").checked) points.push({ ...basePoints[0], id: `warehouse-return-${item.truck.id}`, label: "Warehouse (return)", kind: "warehouse" });
+        const route = (await getRoadRoute(points)).routes?.[0];
+        if (!route) throw new Error(`Routing service did not return a route for truck ${item.truck.id}.`);
+        routed.push({ truckId: item.truck.id, points, route });
+      }
+      if (!routed.length && !allocationData.unassigned.length) throw new Error("No allocation was produced.");
+      drawAllocationRoutes(routed);
+      const totalDistance = routed.reduce((sum, item) => sum + item.route.distance, 0);
+      const totalDuration = routed.reduce((sum, item) => sum + item.route.duration, 0);
+      $("results").classList.add("visible");
+      $("totalDistance").textContent = formatDistance(totalDistance);
+      $("totalDuration").textContent = formatDuration(totalDuration);
+      $("stopCount").textContent = String(resolvedStops.length - allocationData.unassigned.length);
+      renderTruckRouteResults(routed);
+      renderAllocations(allocationData, routed);
+      $("mapTip").textContent = allocationData.unassigned.length
+        ? "Routes calculated with unassigned POs listed below."
+        : "All feasible POs allocated and routed.";
+      setStatus(allocationData.unassigned.length ? "Partial allocation" : "Routes ready");
+
+    } catch (error) {
+      console.error(error);
+      setToast("mainToast", error.message || "Unable to optimize route.");
+      $("mapTip").textContent = "Unable to calculate route. Check the error message in the left panel.";
+      setStatus("Needs attention");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  $("addStopBtn").addEventListener("click", () => {
+    const count = cards().length;
+
+    if (count >= 20) {
+      setToast("mainToast", "This demo supports up to 20 delivery stops.");
+      return;
+    }
+
+    makeStopCard(nextId++, count);
+    clearToast("mainToast");
+  });
+
+  $("addTruckBtn").addEventListener("click", () => {
+    if (truckList.children.length >= 20) {
+      setToast("mainToast", "A maximum of 20 trucks can be allocated at once.");
+      return;
+    }
+    makeTruckCard(truckList.children.length + 1);
+    renumberTrucks();
+  });
+
+  $("locateWarehouseBtn").addEventListener("click", async () => {
+    clearToast("warehouseToast");
+
+    try {
+      const location = await resolveLocation(
+        $("warehouseAddress").value,
+        $("warehouseLat").value,
+        $("warehouseLng").value,
+        "Warehouse"
+      );
+
+      $("warehouseLat").value = location.lat;
+      $("warehouseLng").value = location.lon;
+
+      if (!$("warehouseAddress").value.trim()) {
+        $("warehouseAddress").value = location.label;
+      }
+
+      showPreviewMarker(location, $("warehouseAddress").value || "Warehouse", "warehouse");
+      setToast("warehouseToast", `Coordinates found: ${location.lat.toFixed(6)}, ${location.lon.toFixed(6)}`, "success");
+    } catch (error) {
+      setToast("warehouseToast", error.message);
+    }
+  });
+
+  $("optimizeBtn").addEventListener("click", optimize);
+  $("sampleBtn").addEventListener("click", loadSampleData);
+
+  $("resetBtn").addEventListener("click", () => {
+    if (candidateDecision) {
+      candidateDecision.reject(new Error("Address selection cancelled."));
+      candidateDecision = null;
+    }
+    $("warehouseAddress").value = "";
+    $("warehouseLat").value = "";
+    $("warehouseLng").value = "";
+    $("returnWarehouse").checked = true;
+    deliveryList.innerHTML = "";
+    truckList.innerHTML = "";
+    nextId = 1;
+    nextTruckId = 1;
+    loadSampleData();
+
+    clearToast("mainToast");
+    clearToast("warehouseToast");
+    $("results").classList.remove("visible");
+    markersLayer.clearLayers();
+    previewLayer.clearLayers();
+    currentRoutePoints = [];
+
+    if (routeLayer) {
+      map.removeLayer(routeLayer);
+      routeLayer = null;
+    }
+
+    $("mapTip").textContent = "Add your warehouse and delivery stops to begin.";
+    setStatus("Ready");
+    map.setView([28.6139, 77.2090], 10);
+  });
+
+  makeStopCard(nextId++, 0);
+  makeStopCard(nextId++, 1);
+  makeTruckCard(nextTruckId++, 30);
+
+  fetch("/api/health")
+    .then(response => {
+      if (!response.ok) throw new Error("Backend offline");
+      return response.json();
+    })
+    .then(data => {
+      if (data.ok) setStatus("Backend connected");
+    })
+    .catch(() => {
+      setStatus("Backend offline");
+      setToast("mainToast", "Backend not detected. Run npm start in the project folder and open http://localhost:3000 (not Live Server).");
+    });
+})();
+</script>
+</body>
+</html>
