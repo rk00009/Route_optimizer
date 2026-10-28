@@ -76,6 +76,12 @@
     .allocation-card strong{font-size:12px}
     .allocation-card small{display:block;color:var(--muted);line-height:1.45;margin-top:4px}
     .allocation-card.warning{background:#fff7ed;border-color:#fed7aa;color:#9a3412}
+    .merge-suggestions{display:grid;gap:8px;margin:12px 0 18px}
+    .merge-suggestion{border:1px solid #bfdbfe;border-radius:9px;padding:11px;background:#eff6ff;font-size:11px}
+    .merge-suggestion strong{font-size:12px}
+    .merge-suggestion small{display:block;color:#37527e;line-height:1.45;margin-top:4px}
+    .merge-actions{display:flex;gap:7px;margin-top:9px}
+    .merge-actions .btn{flex:1;padding:8px;font-size:11px}
     .truck-list{display:grid;gap:8px}
     @media(max-width:850px){.app{grid-template-columns:1fr}.sidebar{position:static;height:auto;min-height:0;overflow:visible;border-right:0;border-bottom:1px solid var(--line)}.map-wrap{height:390px;min-height:390px}.topbar{padding:15px 17px}}
     @media(max-width:420px){.sidebar{padding:16px}.grid-priority{grid-template-columns:1fr 88px}.stats{gap:6px}.stat{padding:8px}.stat strong{font-size:15px}}
@@ -156,6 +162,7 @@
         <div class="stat"><span>Delivery stops</span><strong id="stopCount">—</strong></div>
       </div>
       <div id="resultList" class="result-list"></div>
+      <div id="mergeSuggestions" class="merge-suggestions"></div>
       <h3 style="margin-top:18px">Truck allocation</h3>
       <div id="allocationList" class="result-list"></div>
     </section>
@@ -884,6 +891,139 @@
     });
   }
 
+  function renderMergeSuggestions(suggestions, allocationData, routed) {
+    const container = $("mergeSuggestions");
+    container.innerHTML = "";
+    const pending = suggestions.filter(suggestion => {
+      if (suggestion.accepted) return false;
+      const allocation = allocationData.allocations.find(item => item.truck.id === suggestion.truckId);
+      return allocation && allocation.remainingUsableVolume + 1e-9 >= Number(suggestion.po.volume);
+    });
+    if (!pending.length) return;
+
+    const heading = document.createElement("h3");
+    heading.textContent = "Use available truck space?";
+    heading.style.margin = "0 0 8px";
+    container.appendChild(heading);
+
+    pending.forEach(suggestion => {
+      const card = document.createElement("div");
+      card.className = "merge-suggestion";
+      card.innerHTML = `<strong>${escapeHtml(suggestion.po.id)} (${escapeHtml(suggestion.po.name)}) can fit in Truck ${escapeHtml(suggestion.truckId)}</strong>
+        <small>Remaining space: ${suggestion.remainingVolume.toFixed(2)} m³ · PO volume: ${Number(suggestion.po.volume).toFixed(2)} m³</small>
+        <small>Total fleet distance: ${formatDistance(suggestion.beforeDistance)} → ${formatDistance(suggestion.afterDistance)} after merging (${suggestion.afterDistance >= suggestion.beforeDistance ? "+" : ""}${formatDistance(suggestion.afterDistance - suggestion.beforeDistance)})</small>
+        <div class="merge-actions">
+          <button class="btn btn-primary merge-accept" type="button">Use space and merge</button>
+          <button class="btn btn-secondary merge-reject" type="button">Keep separate</button>
+        </div>`;
+
+      card.querySelector(".merge-accept").addEventListener("click", () => {
+        const allocation = allocationData.allocations.find(item => item.truck.id === suggestion.truckId);
+        const routeEntry = routed.find(item => item.truckId === suggestion.truckId);
+        if (!allocation || !routeEntry) {
+          setToast("mainToast", "The merge could not be applied because the truck route is unavailable.");
+          return;
+        }
+
+        allocation.pos.push(suggestion.po);
+        allocation.assignedVolume += Number(suggestion.po.volume);
+        allocation.remainingUsableVolume -= Number(suggestion.po.volume);
+        if (allocation.assignedWeight !== null && suggestion.po.weight !== null) {
+          allocation.assignedWeight += Number(suggestion.po.weight);
+        }
+        allocation.nominalUtilizationPercentage = allocation.assignedVolume / allocation.truck.volumeCapacity * 100;
+        allocation.usableUtilizationPercentage = allocation.assignedVolume / allocation.truck.usableVolume * 100;
+        routeEntry.points = suggestion.mergedPoints;
+        routeEntry.route = suggestion.mergedRoute;
+        const unassignedIndex = allocationData.unassigned.findIndex(item => item.po.id === suggestion.po.id);
+        if (unassignedIndex >= 0) allocationData.unassigned.splice(unassignedIndex, 1);
+        suggestions.forEach(item => {
+          if (item.po.id === suggestion.po.id || item.truckId === suggestion.truckId) {
+            item.accepted = true;
+          }
+        });
+
+        drawAllocationRoutes(routed);
+        const totalDistance = routed.reduce((sum, item) => sum + item.route.distance, 0);
+        const totalDuration = routed.reduce((sum, item) => sum + item.route.duration, 0);
+        $("totalDistance").textContent = formatDistance(totalDistance);
+        $("totalDuration").textContent = formatDuration(totalDuration);
+        $("stopCount").textContent = String(Number($("stopCount").textContent) + 1);
+        renderTruckRouteResults(routed);
+        renderAllocations(allocationData, routed);
+        renderMergeSuggestions(suggestions, allocationData, routed);
+        setStatus(allocationData.unassigned.length ? "Partial allocation" : "Routes ready");
+      });
+
+      card.querySelector(".merge-reject").addEventListener("click", () => {
+        suggestion.accepted = true;
+        renderMergeSuggestions(suggestions, allocationData, routed);
+      });
+      container.appendChild(card);
+    });
+  }
+
+  async function findMergeSuggestions(allocationData, routed, resolvedStops, warehouse) {
+    const beforeDistance = routed.reduce((sum, item) => sum + item.route.distance, 0);
+    const suggestions = [];
+
+    for (const unassigned of allocationData.unassigned) {
+      const stop = resolvedStops.find(item => item.poId === unassigned.po.id);
+      if (!stop) continue;
+
+      for (const allocation of allocationData.allocations) {
+        const remainingVolume = allocation.remainingUsableVolume;
+        const payloadFits = !allocation.truck.usablePayload ||
+          !allocation.assignedWeight ||
+          !stop.weight ||
+          allocation.assignedWeight + Number(stop.weight) <= allocation.truck.usablePayload + 1e-9;
+        if (remainingVolume + 1e-9 < Number(stop.volume) || !payloadFits) continue;
+
+        const routeEntry = routed.find(item => item.truckId === allocation.truck.id);
+        if (!routeEntry) continue;
+        const deliveryPoints = routeEntry.points
+          .filter(point => point.kind === "delivery")
+          .map(point => resolvedStops.find(item => item.id === point.id))
+          .filter(Boolean);
+        deliveryPoints.push(stop);
+        const points = [
+          { id: "warehouse", lat: warehouse.lat, lon: warehouse.lon, label: "Warehouse", kind: "warehouse" },
+          ...deliveryPoints.map((item, index) => ({
+            id: item.id,
+            lat: item.lat,
+            lon: item.lon,
+            label: `${item.poId} · ${item.name}`,
+            priority: item.priority,
+            kind: "delivery",
+            order: index + 1
+          }))
+        ];
+        if ($("returnWarehouse").checked) {
+          points.push({ ...points[0], id: `warehouse-return-${allocation.truck.id}`, label: "Warehouse (return)", kind: "warehouse" });
+        }
+
+        try {
+          const mergedRoute = (await getRoadRoute(points)).routes?.[0];
+          if (!mergedRoute) continue;
+          const afterDistance = beforeDistance - routeEntry.route.distance + mergedRoute.distance;
+          suggestions.push({
+            po: unassigned.po,
+            truckId: allocation.truck.id,
+            remainingVolume,
+            beforeDistance,
+            afterDistance,
+            mergedPoints: points,
+            mergedRoute
+          });
+        } catch (error) {
+          console.warn("Merge route preview unavailable:", error.message);
+        }
+      }
+    }
+
+    return suggestions;
+  }
+
   async function optimize() {
     clearToast("mainToast");
     setBusy(true);
@@ -1004,6 +1144,8 @@
       $("stopCount").textContent = String(resolvedStops.length - allocationData.unassigned.length);
       renderTruckRouteResults(routed);
       renderAllocations(allocationData, routed);
+      const mergeSuggestions = await findMergeSuggestions(allocationData, routed, resolvedStops, warehouse);
+      renderMergeSuggestions(mergeSuggestions, allocationData, routed);
       $("mapTip").textContent = allocationData.unassigned.length
         ? "Routes calculated with unassigned POs listed below."
         : "All feasible POs allocated and routed.";
